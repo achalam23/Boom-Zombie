@@ -33,8 +33,12 @@ gunmanY = int(480)
 
 # Gunman lives
 lives = 5
-cooldown = 2000
+cool_down = 2000
 last_hit_time = 0
+
+# Invincibility period at the start of the round
+round_start_time = pygame.time.get_ticks()
+invincibility_duration = 3000 
 
 # Health Pack
 health_pack = Health_Pack()
@@ -78,12 +82,18 @@ def isCollision(zombieX, zombieY, bulletX, bulletY):
 
 def new_round(round_num):
     global zombies, num_zombies, score, bulletState, zombies_killed, health_pack_spawned
-    num_zombies = round_num * 5
+    num_zombies = min(round_num * 3, 50)
     zombies_killed = 0
     zombies = [Zombie() for _ in range(num_zombies)]
+    max_speed = 5
     for zom in zombies:
-        zom.x_speed = random.choice([2 + round_num, -(2 + round_num)])
-        zom.y_speed = random.choice([2 + round_num, -(2 + round_num)])
+        base_speed = 2 + (round_num / 3)
+        x_speed = random.choice([base_speed, -base_speed])
+        y_speed = random.choice([base_speed, -base_speed])
+
+        zom.x_speed = max(-max_speed, min(max_speed, x_speed))
+        zom.y_speed = max(-max_speed, min(max_speed, y_speed))
+    
     bulletState = "ready"  # Reset bullet state for each new round
     health_pack_spawned = False  # Reset health pack for each new round
 
@@ -93,12 +103,45 @@ gunman = Gunman(gunmanX, gunmanY)
 # New round (first round)
 new_round(curr_round)
 
+# Instructions at beginning of game
+start_screen = True 
+while start_screen:
+    screen.blit(background, (0, 0))
+    font = pygame.font.Font(None, 24)
+    instructions = [
+        "Hello! Welcome to Boom Zombie!",
+        "The rules are simple and as follows:",
+        "Use the arrow keys to move.",
+        "Press the space bar to shoot.",
+        "Avoid zombies and stay alive!",
+        "There are mini power-ups to aid you.",
+        "The dead zone can be dangerous, but helpful if used wisely...",
+        "",
+        "Press the space bar to start the game. Good luck!"
+    ]
+
+    for i, line in enumerate(instructions):
+        text = font.render(line, True, (255, 0, 0))
+        screen.blit(text, (screen.get_width() // 2 - text.get_width() // 2, 100 + i * 40))
+
+    pygame.display.update()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                start_screen = False  # Exit the start screen loop and start the game
+
 # Game loop
 while True:
     screen.fill((0, 255, 0))  # RGB (colors)
     screen.blit(background, (0, 0))  # Background Image
     pygame.draw.line(screen, (0, 0, 0), (0, 565), (800, 565), 2)  # Safe Zone Line
+    current_time = pygame.time.get_ticks()
 
+   
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -175,8 +218,8 @@ while True:
         zombie.update()
         zombie.display(screen)
 
-    # Health pack implementation (Should spawn every 1/3 rounds)
-    if curr_round > 1 and curr_round % 3 == 0 and not health_pack.active and not health_pack_spawned:
+    # Health pack implementation (Should spawn at a random round)
+    if curr_round >= 2 and random.randint(1, 3) == 3 and not health_pack.active and not health_pack_spawned:
         health_pack.spawn()
         health_pack_spawned = True
 
@@ -186,7 +229,7 @@ while True:
     if health_pack.health_collision(gunman):
         lives = 5
         sound.play()
-
+        
     # Check for collisions after updating all zombies
     curr_time = pygame.time.get_ticks()
     for zombie in zombies:
@@ -196,7 +239,7 @@ while True:
             score += 1
             zombies_killed += 1
             zom_remove.append(zombie)
-        elif isCollision(zombie.rect.x, zombie.rect.y, gunman.x, gunman.y) and curr_time - last_hit_time > cooldown:
+        elif curr_time - round_start_time > invincibility_duration and isCollision(zombie.rect.x, zombie.rect.y, gunman.x, gunman.y) and curr_time - last_hit_time > cool_down:
             sound.play()
             lives -= 1
             last_hit_time = curr_time
